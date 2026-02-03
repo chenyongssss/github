@@ -1,5 +1,5 @@
 import arxiv
-import google.generativeai as genai
+import google.genai as genai
 import datetime
 import os
 import requests
