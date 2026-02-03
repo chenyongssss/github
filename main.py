@@ -84,7 +84,7 @@ def send_to_wechat(content):
 
 def main():
     # 你可以修改这里的 topic，例如 "Large Language Models" 或 "Diffusion Models"
-    papers = get_latest_papers(topic="Large Language Models", max_results=3)
+    papers = get_latest_papers(topic="ML for PDE", max_results=3)
     
     daily_report = f"# 📅 AI 前沿论文日报 ({datetime.date.today()})\n\n"
     
