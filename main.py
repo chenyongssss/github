@@ -15,7 +15,7 @@ if not GOOGLE_API_KEY:
 
 genai.configure(api_key=GOOGLE_API_KEY)
 # 使用 Flash 模型以平衡速度与长文本能力
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-2.5-flash')
 
 def get_latest_papers(topic="Machine Learning", max_results=3):
     """从 ArXiv 获取指定主题的最新论文"""
