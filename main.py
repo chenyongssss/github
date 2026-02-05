@@ -83,8 +83,12 @@ def send_to_wechat(content):
         print(f"❌ 推送失败: {e}")
 
 def main():
+    custom_topic = (
+        '("Scientific Machine Learning" OR "Physics Informed" OR "Neural Operator" '
+        'OR "Flow Matching" OR "Hamiltonian Neural" OR "Transport Equation")'
+    )
     # 你可以修改这里的 topic，例如 "Large Language Models" 或 "Diffusion Models"
-    papers = get_latest_papers(topic="AI for Science", max_results=5)
+    papers = get_latest_papers(topic=custom_topic, max_results=5)
     
     daily_report = f"# 📅 AI 前沿论文日报 ({datetime.date.today()})\n\n"
     
