@@ -3,39 +3,55 @@ import google.generativeai as genai
 import datetime
 import os
 import requests
-import json
+import time # 引入时间库
 
 # 1. 配置与初始化
-# 从环境变量读取密钥，确保安全
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
-PUSHPLUS_TOKEN = os.getenv('PUSHPLUS_TOKEN')  # 新增：用于微信推送
+PUSHPLUS_TOKEN = os.getenv('PUSHPLUS_TOKEN')
 
 if not GOOGLE_API_KEY:
     raise ValueError("Error: GOOGLE_API_KEY environment variable not set.")
 
 genai.configure(api_key=GOOGLE_API_KEY)
-# 使用 Flash 模型以平衡速度与长文本能力
+# 使用 Pro 模型
 model = genai.GenerativeModel('gemini-2.5-flash')
 
-def get_latest_papers(topic="Machine Learning", max_results=3):
-    """从 ArXiv 获取指定主题的最新论文"""
+def get_latest_papers(topic, max_results=5):
+    """从 ArXiv 获取指定主题的最新论文（防限流版）"""
     print(f"🔍 正在检索关于 {topic} 的最新论文...")
     
-    # 构造 search query，按提交时间倒序
+    # 构造 search query
     search = arxiv.Search(
         query=topic,
         max_results=max_results,
         sort_by=arxiv.SortCriterion.SubmittedDate
     )
     
+    # 🌟 关键修改：使用 Client 来控制请求频率
+    # page_size: 每次请求获取多少篇
+    # delay_seconds: 请求间隔时间（防封号）
+    # num_retries: 失败自动重试次数
+    client = arxiv.Client(
+        page_size=5,
+        delay_seconds=3,
+        num_retries=3
+    )
+
     papers_data = []
-    for result in search.results():
-        papers_data.append({
-            "title": result.title,
-            "abstract": result.summary,
-            "url": result.entry_id,
-            "published": result.published.strftime("%Y-%m-%d")
-        })
+    try:
+        # 使用 client.results(search) 替代原来的 search.results()
+        for result in client.results(search):
+            papers_data.append({
+                "title": result.title,
+                "abstract": result.summary,
+                "url": result.entry_id,
+                "published": result.published.strftime("%Y-%m-%d")
+            })
+    except Exception as e:
+        print(f"⚠️ ArXiv 检索出错 (可能是网络波动): {e}")
+        # 如果出错，返回空列表，避免整个程序崩溃
+        return []
+        
     return papers_data
 
 def generate_summary(paper):
@@ -43,7 +59,7 @@ def generate_summary(paper):
     print(f"🤖 正在研读论文：{paper['title']} ...")
     
     prompt = f"""
-    You are an expert academic researcher in Machine Learning. Please analyze the following paper metadata.
+    You are an expert academic researcher. Please analyze the following paper metadata.
     
     Input Data:
     Title: {paper['title']}
@@ -53,11 +69,13 @@ def generate_summary(paper):
     1. Translate title to Simplified Chinese.
     2. Summarize core content (100-150 words) in Chinese. Be professional but accessible.
     3. List exactly 3 key innovation points (bullet points).
-    4. Provide 2-3 tags (e.g., #CV, #LLM).
+    4. Provide 2-3 tags (e.g., #SciML, #PDE).
     5. Output strictly in Markdown format.
     """
     
     try:
+        # 增加一个小的延迟，避免 Gemini API 也过载
+        time.sleep(2)
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
@@ -66,7 +84,7 @@ def generate_summary(paper):
 def send_to_wechat(content):
     """通过 PushPlus 推送到微信"""
     if not PUSHPLUS_TOKEN:
-        print("未配置 PUSHPLUS_TOKEN，跳过推送，仅本地打印。")
+        print("⚠️ 未配置 PUSHPLUS_TOKEN，跳过推送。")
         return
 
     url = 'http://www.pushplus.plus/send'
@@ -83,13 +101,18 @@ def send_to_wechat(content):
         print(f"❌ 推送失败: {e}")
 
 def main():
-    custom_topic = (
-        '("Scientific Machine Learning" OR "Physics Informed" OR "Neural Operator" '
-        'OR "Flow Matching" OR "Hamiltonian Neural" OR "Transport Equation")'
-    )
-    # 你可以修改这里的 topic，例如 "Large Language Models" 或 "Diffusion Models"
-    papers = get_latest_papers(topic=custom_topic, max_results=5)
+    # --- 针对你 Research Experience 定制的查询 ---
+    # 我们稍微简化了查询语句，去掉了括号嵌套，使其更符合 ArXiv 的偏好
+    # 重点关注 SciML, Neural Operators 和 Transport/Hamiltonian
+    custom_topic = '("Scientific Machine Learning" OR "Neural Operator" OR "Flow Matching" OR "Hamiltonian Neural")'
     
+    # 获取论文
+    papers = get_latest_papers(topic=custom_topic, max_results=3)
+    
+    if not papers:
+        print("❌ 本次未检索到论文或连接被拒绝，请稍后再试。")
+        return
+
     daily_report = f"# 📅 AI 前沿论文日报 ({datetime.date.today()})\n\n"
     
     for paper in papers:
